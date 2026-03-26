@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
 }
 
 // ===== PATCH /api/admin/inquiries/[id] =====
-export async function PATCH_INQUIRY(request: NextRequest, id: string, userId: string) {
+export async function PATCH(request: NextRequest, id: string, userId: string) {
   const updateSchema = z.object({
     status: z.enum(["NEW", "IN_PROGRESS", "AWAITING_CLIENT", "CLOSED_WON", "CLOSED_LOST", "SPAM"]).optional(),
     assignedToId: z.string().optional().nullable(),
