@@ -146,7 +146,7 @@ export async function POST(request: NextRequest) {
     sendEmail({
       to: data.email,
       subject: `We received your inquiry — ${siteName}`,
-      html: InquiryConfirmationEmail({
+      html:InquiryConfirmationEmail({
         name: data.name,
         propertyTitle: property?.title,
         siteName,
