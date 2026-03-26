@@ -1,27 +1,20 @@
 import { Star, Quote } from "lucide-react";
 
-const testimonials = [
-  {
-    name: "Sarah Johnson",
-    role: "Home Buyer",
-    content: "The process was incredibly smooth. I found my dream apartment within a week of using Prestige Properties!",
-    rating: 5
-  },
-  {
-    name: "Michael Chen",
-    role: "Property Seller",
-    content: "Professional and transparent. They handled all the paperwork and got me a price higher than I expected.",
-    rating: 5
-  },
-  {
-    name: "Emma Williams",
-    role: "First-time Buyer",
-    content: "As a first-time buyer, I was nervous. Their team walked me through every step. Highly recommended!",
-    rating: 4
-  }
-];
+// 1. Define the shape of a Testimonial coming from the database
+interface Testimonial {
+  id: string;
+  clientName: string;
+  clientTitle: string | null;
+  rating: number;
+  text: string;
+}
 
-export function TestimonialsSection() {
+// 2. Define the Props the component will receive
+interface TestimonialsSectionProps {
+  testimonials: Testimonial[];
+}
+
+export function TestimonialsSection({ testimonials }: TestimonialsSectionProps) {
   return (
     <section className="py-20 bg-white">
       <div className="container mx-auto px-4">
@@ -31,8 +24,8 @@ export function TestimonialsSection() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {testimonials.map((item, index) => (
-            <div key={index} className="p-8 bg-gray-50 rounded-2xl relative">
+          {testimonials.map((item) => (
+            <div key={item.id} className="p-8 bg-gray-50 rounded-2xl relative">
               <Quote className="absolute top-4 right-4 w-8 h-8 text-blue-100" />
               <div className="flex mb-4">
                 {[...Array(5)].map((_, i) => (
@@ -42,10 +35,10 @@ export function TestimonialsSection() {
                   />
                 ))}
               </div>
-              <p className="text-gray-700 italic mb-6">"{item.content}"</p>
+              <p className="text-gray-700 italic mb-6">"{item.text}"</p>
               <div>
-                <h4 className="font-bold text-gray-900">{item.name}</h4>
-                <p className="text-sm text-gray-500">{item.role}</p>
+                <h4 className="font-bold text-gray-900">{item.clientName}</h4>
+                <p className="text-sm text-gray-500">{item.clientTitle || "Verified Client"}</p>
               </div>
             </div>
           ))}
