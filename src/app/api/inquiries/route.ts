@@ -5,6 +5,7 @@ import { verifyTurnstile, getClientIp } from "@/lib/utils";
 import { sendEmail } from "@/lib/email";
 import { InquiryNotificationEmail } from "@/emails/InquiryNotificationEmail";
 import { InquiryConfirmationEmail } from "@/emails/InquiryConfirmationEmail";
+import { render } from "@react-email/render";
 
 const inquirySchema = z.object({
   type: z.enum(["PROPERTY", "GENERAL", "VIEWING"]).default("PROPERTY"),
@@ -16,23 +17,19 @@ const inquirySchema = z.object({
   subject: z.string().max(200).optional(),
   message: z.string().min(10, "Message must be at least 10 characters").max(2000),
   turnstileToken: z.string().min(1, "Security verification required"),
-  honeypot: z.string().max(0, "Bot detected").optional(), // must be empty
+  honeypot: z.string().max(0, "Bot detected").optional(), 
 });
 
-// Simple in-memory rate limit fallback (use Redis in production)
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 
 function checkRateLimit(ip: string, limit: number, windowMs: number): boolean {
   const now = Date.now();
   const entry = rateLimitMap.get(ip);
-
   if (!entry || entry.resetAt < now) {
     rateLimitMap.set(ip, { count: 1, resetAt: now + windowMs });
     return true;
   }
-
   if (entry.count >= limit) return false;
-
   entry.count++;
   return true;
 }
@@ -41,7 +38,6 @@ export async function POST(request: NextRequest) {
   try {
     const ip = getClientIp(request);
 
-    // Rate limit: 5 per hour per IP
     if (!checkRateLimit(ip, 5, 60 * 60 * 1000)) {
       return NextResponse.json(
         { error: "Too many requests. Please try again later." },
@@ -50,8 +46,6 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-
-    // Validate
     const result = inquirySchema.safeParse(body);
     if (!result.success) {
       return NextResponse.json(
@@ -62,12 +56,10 @@ export async function POST(request: NextRequest) {
 
     const { turnstileToken, honeypot, ...data } = result.data;
 
-    // Honeypot check
     if (honeypot && honeypot.length > 0) {
-      return NextResponse.json({ success: true }); // Silent reject
+      return NextResponse.json({ success: true }); 
     }
 
-    // Turnstile verification
     const turnstileValid = await verifyTurnstile(turnstileToken);
     if (!turnstileValid) {
       return NextResponse.json(
@@ -76,7 +68,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if spam (same email + same property in last hour)
     const recentSubmission = await prisma.inquiry.findFirst({
       where: {
         email: data.email.toLowerCase(),
@@ -92,7 +83,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get property if provided
     let property = null;
     if (data.propertyId) {
       property = await prisma.property.findUnique({
@@ -104,13 +94,11 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Get site settings for notification email
     const settings = await prisma.siteSettings.findUnique({
       where: { id: "singleton" },
       select: { notificationEmail: true, siteName: true },
     });
 
-    // Create inquiry
     const inquiry = await prisma.inquiry.create({
       data: {
         type: data.type,
@@ -126,35 +114,38 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Send emails (fire and forget — don't block response)
     const notificationEmail = settings?.notificationEmail || process.env.ADMIN_EMAIL;
     const siteName = settings?.siteName || "Prestige Properties";
 
+    // Admin Notification
     if (notificationEmail) {
+      const adminHtml = await render(InquiryNotificationEmail({
+        inquiry: { ...inquiry, propertyTitle: property?.title },
+        siteName,
+        dashboardUrl: `${process.env.NEXT_PUBLIC_SITE_URL}/admin/inquiries/${inquiry.id}`,
+      }));
+
       sendEmail({
         to: notificationEmail,
         subject: `New ${data.type.toLowerCase()} inquiry from ${data.name}`,
-        html: InquiryNotificationEmail({
-          inquiry: { ...inquiry, propertyTitle: property?.title },
-          siteName,
-          dashboardUrl: `${process.env.NEXT_PUBLIC_SITE_URL}/admin/inquiries/${inquiry.id}`,
-        }),
+        html: adminHtml,
       }).catch(console.error);
     }
 
-    // Auto-reply to submitter
+    // User Auto-reply
+    const userHtml = await render(InquiryConfirmationEmail({
+      name: data.name,
+    }));
+
     sendEmail({
       to: data.email,
       subject: `We received your inquiry — ${siteName}`,
-      html:InquiryConfirmationEmail({
-        name: data.name,
-        propertyTitle: property?.title,
-        siteName,
-        siteUrl: process.env.NEXT_PUBLIC_SITE_URL!,
-      }),
+      html: userHtml,
     }).catch(console.error);
 
+    // Return SUCCESS response
     return NextResponse.json({ success: true, id: inquiry.id });
+
   } catch (error) {
     console.error("[POST /api/inquiries]", error);
     return NextResponse.json({ error: "Failed to submit inquiry." }, { status: 500 });
